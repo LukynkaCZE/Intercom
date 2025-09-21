@@ -10,8 +10,9 @@ repositories {
 
 dependencies {
     testImplementation(kotlin("test"))
-    implementation(libs.tide)
-    implementation(libs.bindables)
+    api(libs.tide)
+    api(libs.bindables)
+    api(libs.bundles.logger)
 }
 
 tasks.test {

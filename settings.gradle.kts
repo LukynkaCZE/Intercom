@@ -5,3 +5,4 @@ rootProject.name = "Intercom"
 include("server")
 include("client")
 include("common")
+include("test")

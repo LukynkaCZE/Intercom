@@ -1,7 +1,13 @@
 [versions]
 tide = "3.8"
 bindables = "2.2"
+pretty-log = "1.11"
 
 [libraries]
 tide = { group = "io.github.dockyardmc", name = "tide", version.ref = "tide" }
 bindables = { group = "cz.lukynka", name = "kotlin-bindables", version.ref = "bindables" }
+logger-common = { group = "cz.lukynka", name = "pretty-log-common", version.ref = "pretty-log" }
+logger-jvm = { group = "cz.lukynka", name = "pretty-log-jvm", version.ref = "pretty-log" }
+
+[bundles]
+logger = ["logger-common", "logger-jvm"]
