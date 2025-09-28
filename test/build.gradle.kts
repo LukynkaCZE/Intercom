@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation("org.slf4j:slf4j-nop:2.0.9")
+    testImplementation("org.slf4j:slf4j-nop:2.0.9")
     implementation(project(":client"))
     implementation(project(":server"))
     testImplementation(kotlin("test"))

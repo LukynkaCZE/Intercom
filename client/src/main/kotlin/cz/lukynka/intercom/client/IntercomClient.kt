@@ -1,37 +1,47 @@
 package cz.lukynka.intercom.client
 
-import cz.lukynka.intercom.common.IntercomPacketRegistry
+import cz.lukynka.bindables.BindableDispatcher
+import cz.lukynka.intercom.common.ConnectionInfo
 import cz.lukynka.intercom.common.SharedIntercomConstants
 import cz.lukynka.intercom.common.handlers.*
 import cz.lukynka.intercom.common.protocol.encryption.EncryptionUtil
 import cz.lukynka.intercom.common.protocol.packet.*
 import cz.lukynka.prettylog.LogType
-import cz.lukynka.prettylog.log
+import cz.lukynka.prettylog.PrettyLogger
+import cz.lukynka.prettylog.style.LogStyle
+import cz.lukynka.prettylog.style.StaticLogPrefix
 import io.github.dockyardmc.tide.codec.toByteArraySafe
 import io.github.dockyardmc.tide.codec.toByteBuf
 import java.util.concurrent.CompletableFuture
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 
-data class IntercomClient(val registry: IntercomPacketRegistry, val messageHandler: IntercomPacketHandler, val serverName: String, val authorizationToken: String) {
+data class IntercomClient(val messageHandler: IntercomPacketHandler, val serverName: String, val authorizationToken: String) {
 
+    val logger = PrettyLogger(StaticLogPrefix(" $serverName ", LogStyle.FILLED_LIGHT_GRAY))
     val crypto = EncryptionUtil.getNewCrypto()
-    val nettyClient = NettyClient(messageHandler, "0.0.0.0", 25566)
+    val nettyClient = NettyClient(this, "0.0.0.0", 25566)
+
+    val successfullyConnectedToServer = BindableDispatcher<ConnectionInfo>()
 
     init {
-        registry.addHandler(ClientboundDisconnectClientIntercomPacket::class) { packet, _ ->
-            log(" ", LogType.ERROR)
-            log("Client disconnected by server, reason: ${packet.reason}", LogType.ERROR)
-            log(" ", LogType.ERROR)
+        messageHandler.registry.addPacketHandler(ClientboundDisconnectClientIntercomPacket::class) { packet, _ ->
+            logger.log(" ", LogType.ERROR)
+            logger.log("Client disconnected by server, reason: ${packet.reason}", LogType.ERROR)
+            logger.log(" ", LogType.ERROR)
             messageHandler.bindablePool.dispose()
             nettyClient.disconnect()
+        }
+
+        messageHandler.channelInactiveDispatcher.subscribe { connection ->
+            nettyClient.reconnect()
         }
 
         messageHandler.channelActiveDispatcher.subscribe { connection ->
             connection.sendPacket(ServerboundHandshakePacket(serverName, SharedIntercomConstants.PROTOCOL_VERSION), messageHandler)
         }
 
-        registry.addHandler(ClientboundEncryptionRequestIntercomPacket::class) { packet, connection ->
+        messageHandler.registry.addPacketHandler(ClientboundEncryptionRequestIntercomPacket::class) { packet, connection ->
 
             val serverPublicKeyBytes = packet.publicKey.toByteArraySafe()
             val verifyToken = packet.verifyToken.toByteArraySafe()
@@ -55,12 +65,12 @@ data class IntercomClient(val registry: IntercomPacketRegistry, val messageHandl
                 encryptedVerifyToken.toByteBuf()
             )
 
-            connection.sendPacket(responsePacket, messageHandler)
+            connection.sendPacket(responsePacket)
         }
 
-        registry.addHandler(ClientboundEncryptionFinish::class) { _, connection ->
+        messageHandler.registry.addPacketHandler(ClientboundEncryptionFinish::class) { _, connection ->
 
-            val pipeline = connection.channel().pipeline()
+            val pipeline = connection.connection.channel().pipeline()
 
             pipeline.addBefore(ChannelHandlers.MESSAGE_HANDLER, ChannelHandlers.PACKET_ENCRYPTOR, PacketEncryptionHandler(crypto))
             pipeline.addBefore(ChannelHandlers.MESSAGE_HANDLER, ChannelHandlers.PACKET_DECRYPTOR, PacketDecryptionHandler(crypto))
@@ -68,10 +78,11 @@ data class IntercomClient(val registry: IntercomPacketRegistry, val messageHandl
             crypto.isConnectionEncrypted = true
             messageHandler.encryptionEnabled = true
 
-            connection.sendPacket(ServerboundAuthorizationRequestIntercomPacket(authorizationToken), messageHandler)
+            connection.sendPacket(ServerboundAuthorizationRequestIntercomPacket(authorizationToken))
         }
 
-        registry.addHandler(ClientboundAuthorizationResponseIntercomPacket::class) { _, _ ->
+        messageHandler.registry.addPacketHandler(ClientboundAuthorizationResponseIntercomPacket::class) { _, connection ->
+            successfullyConnectedToServer.dispatch(connection)
         }
     }
 

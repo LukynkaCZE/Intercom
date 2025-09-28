@@ -13,7 +13,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.LengthFieldPrepender
 import java.util.concurrent.CompletableFuture
 
-class NettyServer(val handler: IntercomPacketHandler, val ip: String, val port: Int) {
+class NettyServer(val server: IntercomServer, val ip: String, val port: Int) {
 
     val bossGroup = NioEventLoopGroup()
     val workerGroup = NioEventLoopGroup()
@@ -30,13 +30,13 @@ class NettyServer(val handler: IntercomPacketHandler, val ip: String, val port: 
                         val pipeline = ch.pipeline()
                             .addLast(ChannelHandlers.FRAME_DECODER, LengthFieldBasedFrameDecoder(1024 * 1024, 0, 4, 0, 4))
                             .addLast(ChannelHandlers.FRAME_ENCODER, LengthFieldPrepender(4))
-                            .addLast(ChannelHandlers.MESSAGE_HANDLER, handler)
+                            .addLast(ChannelHandlers.MESSAGE_HANDLER, server.messageHandler)
                     }
                 })
 
             val future = bootstrap.bind(ip, port).sync()
             serverChannel = future.channel()
-            log("Intercom server running to $ip:$port!", LogType.SUCCESS)
+            IntercomServer.logger.log("Intercom server running to $ip:$port!", LogType.SUCCESS)
         }
     }
     

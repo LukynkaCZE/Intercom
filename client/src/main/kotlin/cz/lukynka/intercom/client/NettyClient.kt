@@ -1,9 +1,7 @@
 package cz.lukynka.intercom.client
 
 import cz.lukynka.intercom.common.handlers.ChannelHandlers
-import cz.lukynka.intercom.common.handlers.IntercomPacketHandler
 import cz.lukynka.prettylog.LogType
-import cz.lukynka.prettylog.log
 import io.netty.bootstrap.Bootstrap
 import io.netty.channel.ChannelFutureListener
 import io.netty.channel.ChannelInitializer
@@ -16,7 +14,7 @@ import io.netty.handler.codec.LengthFieldPrepender
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
-class NettyClient(val messageHandler: IntercomPacketHandler, val ip: String, val port: Int) {
+class NettyClient(val client: IntercomClient, val ip: String, val port: Int) {
 
     val bossGroup = NioEventLoopGroup()
     val bootstrap = Bootstrap()
@@ -35,7 +33,7 @@ class NettyClient(val messageHandler: IntercomPacketHandler, val ip: String, val
                         val pipeline = ch.pipeline()
                             .addLast(ChannelHandlers.FRAME_DECODER, LengthFieldBasedFrameDecoder(1024 * 1024, 0, 4, 0, 4))
                             .addLast(ChannelHandlers.FRAME_ENCODER, LengthFieldPrepender(4))
-                            .addLast(ChannelHandlers.MESSAGE_HANDLER, messageHandler)
+                            .addLast(ChannelHandlers.MESSAGE_HANDLER, client.messageHandler)
                     }
                 })
             connect()
@@ -67,11 +65,11 @@ class NettyClient(val messageHandler: IntercomPacketHandler, val ip: String, val
 
     fun reconnect() {
         if (isShuttingDown) {
-            log("Cannot reconnect - client is shutting down", LogType.WARNING)
+            client.logger.log("Cannot reconnect - client is shutting down", LogType.WARNING)
             return
         }
 
-        log("Scheduling reconnection in 5 seconds...", LogType.WARNING)
+        client.logger.log("Scheduling reconnection in 5 seconds...", LogType.WARNING)
         bossGroup.schedule(::connect, 5, TimeUnit.SECONDS)
     }
 
@@ -84,10 +82,10 @@ class NettyClient(val messageHandler: IntercomPacketHandler, val ip: String, val
 
         future.addListener(ChannelFutureListener { channelFuture ->
             if (channelFuture.isSuccess) {
-                log("Intercom client connected to ${ip}:${port}!", LogType.SUCCESS)
+                client.logger.log("Intercom client connected to ${ip}:${port}!", LogType.SUCCESS)
             } else {
                 if (!isShuttingDown) {
-                    log("Connection failed: ${channelFuture.cause()?.message}", LogType.ERROR)
+                    client.logger.log("Connection failed: ${channelFuture.cause()?.message}", LogType.ERROR)
                     reconnect()
                 }
             }

@@ -1,7 +1,7 @@
 [versions]
 tide = "3.8"
 bindables = "2.2"
-pretty-log = "1.11"
+pretty-log = "2.0"
 
 [libraries]
 tide = { group = "io.github.dockyardmc", name = "tide", version.ref = "tide" }
